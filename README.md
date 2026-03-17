@@ -1,90 +1,126 @@
 # Research Agent Lab
 
-一个面向科研探索场景的多代理原型系统。把一段还比较粗糙的研究想法，拆成一条可执行的工作流，最后产出一份研究计划和一个实验代码骨架。
+一个面向科研探索场景的多代理研究助手原型：从输入想法、检索论文、结构化摘要、评审和聚合，到产出研究计划、实验脚手架、运行报告和可追踪的状态记录。
 
-## 项目在解决什么问题
+- 有编排层
+- 有服务层
+- 有提示词模板
+- 有持久化和缓存
+- 有 benchmark
+- 有后台任务
+- 有本地 Web UI
 
-做文献调研和选题设计时，很多步骤其实都很重复：
+## 它能做什么
 
-- 从想法里抽关键词
-- 去检索相关论文
-- 粗读摘要并筛掉噪音
-- 对论文做相关性和方法质量判断
-- 归纳几个值得继续挖的方向
-- 写成研究计划
-- 顺手搭一个可继续开发的实验脚手架
+给系统一段研究想法之后，它会按阶段完成这些工作：
 
-这个项目就是把这条链路做成一个可以本地跑通的 MVP。
+1. 提取关键词
+2. 从多个来源检索论文
+3. 生成结构化摘要
+4. 对论文做结构化评分和评论
+5. 聚合候选研究方向
+6. 生成研究计划
+7. 生成一个最小实验项目骨架
+8. 保存报告、状态快照、产物和事件记录
 
-## 当前特性
+默认情况下，这一切都可以离线跑通。即使没有配置真实 LLM，系统也会使用确定性 fallback，把流程完整走完，适合本地调试和做系统开发。
 
-- 多代理顺序编排：从想法分析到代码骨架生成
-- 共享状态模型：所有代理围绕统一的 `ResearchState` 工作
-- SQLite 持久化：保存每次运行状态与阶段产物
-- 本地可运行：默认离线模式，不依赖真实 LLM 也能跑通
-- 在线可切换：支持 OpenAI 兼容接口
-- 产物落盘：自动生成研究计划和实验代码文件
-- 测试覆盖：包含关键词提取、持久化、失败场景和端到端流程
+## 现在这版的重点能力
 
-## 流程图
+- 多代理工作流，支持阶段级持久化
+- 可恢复执行，支持从已有 `run_id` 继续
+- 多源检索接口：`arXiv`、`Semantic Scholar`、`Crossref`
+- 提示词模板外置，支持版本追踪
+- LLM 路由、调用记录和缓存
+- SQLite 仓储层，支持 run、artifact、event、prompt call 查询
+- 本地 benchmark 评估
+- 后台任务管理
+- 本地 WSGI API
+- 同源轻量前端页面
+
+## 系统流程图
 
 ```mermaid
 flowchart TD
     A["用户输入研究想法"] --> B["IdeaAnalyzerAgent<br/>提取关键词"]
-    B --> C["FetcherAgent<br/>检索 arXiv 论文"]
-    C --> D["SummarizerAgent<br/>生成摘要与改进点"]
-    D --> E["CriticAgent<br/>打分并生成评论"]
-    E --> F["TrendAgent<br/>聚类或排序，形成候选方向"]
-    F --> G["PlanAgent<br/>生成 research_plan.md"]
-    G --> H["CodeGenAgent<br/>生成 generated_experiment.py"]
+    B --> C["FetcherAgent<br/>多源检索与重排序"]
+    C --> D["SummarizerAgent<br/>结构化摘要"]
+    D --> E["CriticAgent<br/>结构化评分与评论"]
+    E --> F["TrendAgent<br/>候选方向聚合"]
+    F --> G["PlanAgent<br/>生成研究计划"]
+    G --> H["CodeGenAgent<br/>生成项目骨架与报告"]
 
-    B -.状态更新.-> S["ResearchState"]
-    C -.状态更新.-> S
-    D -.状态更新.-> S
-    E -.状态更新.-> S
-    F -.状态更新.-> S
-    G -.状态更新.-> S
-    H -.状态更新.-> S
+    B -.写入.-> S["ResearchState"]
+    C -.写入.-> S
+    D -.写入.-> S
+    E -.写入.-> S
+    F -.写入.-> S
+    G -.写入.-> S
+    H -.写入.-> S
 
-    S --> P["SQLite Persistence<br/>runs / artifacts"]
-    G --> O["runs/<run_id>/research_plan.md"]
-    H --> Q["runs/<run_id>/generated_experiment.py"]
+    S --> R["ResearchRepository<br/>runs / artifacts / events / prompt_calls / cache"]
+    R --> UI["Web UI / CLI / API"]
 ```
 
-## 运行流程
+## 架构分层
 
-当前入口是 `main.py`，执行时会创建一个 `Orchestrator`，依次调用这些代理：
+这版代码按职责分成了几层：
 
-1. `IdeaAnalyzerAgent`
-2. `FetcherAgent`
-3. `SummarizerAgent`
-4. `CriticAgent`
-5. `TrendAgent`
-6. `PlanAgent`
-7. `CodeGenAgent`
+- `orchestrator.py`
+  负责阶段调度、状态更新、恢复执行、产物写出和错误处理。
 
-编排层负责几件关键的工程工作：
+- `agents.py`
+  定义工作流里的代理，但代理本身只做“阶段职责”，不再直接堆业务细节。
 
-- 生成 `run_id`
-- 初始化共享状态
-- 每一阶段后保存状态快照
-- 把产物写入磁盘
-- 记录错误并在失败时停止流程
-- 同步写入 SQLite
+- `services.py`
+  是核心服务层，包含：
+  - 检索服务
+  - LLM 服务
+  - 摘要 / 评审 / 选题服务
+  - 研究计划与代码生成服务
 
-## 项目结构
+- `prompt_templates/`
+  放结构化提示词模板，并由 `prompting.py` 统一加载和追踪版本。
+
+- `repository.py`
+  是 SQLite 仓储层，负责持久化和查询，不只是“写库”。
+
+- `jobs.py`
+  提供后台任务执行能力。
+
+- `api.py`
+  提供 JSON API，并同时托管轻量前端。
+
+- `evaluation.py`
+  提供 benchmark 评估入口。
+
+## Web UI
+
+这版已经带一个本地前端页面，不需要额外前端构建工具。
+
+启动方式：
+
+```bash
+python3 main.py --serve-api
+```
+
+然后打开：
 
 ```text
-.
-├── main.py            # CLI 入口
-├── orchestrator.py    # 多代理编排与产物写出
-├── agents.py          # 各阶段代理
-├── utils.py           # 检索、关键词、LLM、计划/代码生成等工具函数
-├── models.py          # TypedDict 状态与记录结构
-├── storage.py         # SQLite 持久化
-├── tests/             # 单元测试与集成测试
-└── runs/              # 每次运行的输出目录（运行后生成）
+http://127.0.0.1:8000
 ```
+
+页面里可以做这些事：
+
+- 提交新的研究想法
+- 选择同步运行或后台运行
+- 查看最近运行历史
+- 查看某次 run 的详细状态
+- 查看候选研究方向
+- 预览研究计划
+- 查看生成文件、artifact 和事件流
+
+前端是纯静态实现，位于 `web/` 目录，直接由 API 同源托管。
 
 ## 快速开始
 
@@ -94,7 +130,7 @@ flowchart TD
 pip install -r requirements.txt
 ```
 
-直接运行默认示例：
+直接运行一个默认任务：
 
 ```bash
 python3 main.py
@@ -103,47 +139,72 @@ python3 main.py
 传入自己的研究想法：
 
 ```bash
-python3 main.py --input "多智能体系统在科研选题中的应用"
+python3 main.py --input "多智能体系统如何用于科研选题与实验规划"
 ```
 
-自定义输出位置：
+指定数据库和输出目录：
 
 ```bash
 python3 main.py \
-  --input "多智能体系统在科研选题中的应用" \
+  --input "多智能体系统如何用于科研选题与实验规划" \
   --db-path research_agent.db \
   --output-dir runs \
-  --max-results 5
+  --max-results 8
 ```
 
-## 输出结果
+## 运行模式
 
-每次运行都会生成一个新的 `run_id`，并在 `runs/<run_id>/` 下写出：
+### 1. CLI 直接运行
 
-- `state.json`：当前运行的完整状态快照
-- `research_plan.md`：研究计划
-- `generated_experiment.py`：实验代码骨架
+适合开发和调试：
 
-数据库里则会存两类记录：
+```bash
+python3 main.py --input "你的研究想法"
+```
 
-- `runs`：每次运行的整体状态
-- `artifacts`：每个阶段产生的快照、文件或错误信息
+### 2. Resume 已有运行
+
+适合失败恢复或继续执行：
+
+```bash
+python3 main.py --resume-run-id your_run_id --input "原始输入"
+```
+
+### 3. 本地 API + Web UI
+
+```bash
+python3 main.py --serve-api
+```
+
+### 4. Benchmark
+
+```bash
+python3 main.py --benchmark
+```
 
 ## 离线模式与在线模式
 
 ### 离线模式
 
-默认就是离线模式，适合本地调试和看流程是否跑通。
+默认就是离线模式。
 
 这个模式下：
 
-- LLM 输出走确定性 stub
-- 检索失败时会自动回退
-- 没有真实论文结果时，也会基于输入生成计划和代码骨架
+- 检索失败时会回退到离线 seed paper
+- LLM 输出走确定性 fallback
+- 整体工作流依旧可运行
+
+这对系统调试非常重要，因为你不需要先解决网络、API Key、模型可用性这些问题，才能验证系统结构。
 
 ### 在线模式
 
-如果你想接真实模型，可以启用 `--live-llm`，并配置环境变量：
+如果你希望接真实模型，可以启用：
+
+```bash
+python3 main.py --live-llm --input "你的研究想法"
+```
+
+并配置环境变量：
 
 ```bash
 export OPENAI_API_KEY=your_key
@@ -151,13 +212,83 @@ export OPENAI_BASE_URL=https://api.openai.com/v1
 export OPENAI_MODEL=gpt-4o-mini
 ```
 
-运行方式：
+如果配置不完整，系统会明确报错，并把错误记录到状态和事件流里。
 
-```bash
-python3 main.py --live-llm --input "你的研究想法"
+## 输出内容
+
+每次 run 都会在 `runs/<run_id>/` 下生成产物。当前常见输出包括：
+
+- `state.json`
+- `research_plan.md`
+- `report.md`
+- `generated_experiment.py`
+- `generated_project/configs/default.json`
+- `generated_project/src/train.py`
+- `generated_project/src/evaluate.py`
+- `generated_project/README_experiment.md`
+
+同时，数据库中会持久化：
+
+- `runs`
+- `artifacts`
+- `events`
+- `prompt_calls`
+- `cache_entries`
+
+## API 概览
+
+当前已经提供的接口包括：
+
+- `GET /`
+  返回前端页面
+
+- `GET /health`
+  健康检查
+
+- `GET /runs`
+  查看最近运行
+
+- `POST /runs`
+  同步执行一个 run
+
+- `POST /jobs`
+  提交后台任务
+
+- `GET /jobs/<job_id>`
+  查看后台任务状态
+
+- `GET /runs/<run_id>`
+  获取完整状态
+
+- `GET /runs/<run_id>/artifacts`
+  获取 artifact 列表
+
+- `GET /runs/<run_id>/events`
+  获取事件流
+
+- `GET /runs/<run_id>/prompt-calls`
+  获取 prompt 调用记录
+
+## 项目结构
+
+```text
+.
+├── main.py
+├── orchestrator.py
+├── agents.py
+├── services.py
+├── repository.py
+├── config.py
+├── prompting.py
+├── prompt_templates/
+├── api.py
+├── jobs.py
+├── evaluation.py
+├── web/
+├── benchmarks/
+├── tests/
+└── settings.example.toml
 ```
-
-如果环境没配好，系统会明确报错，并把错误写入状态和数据库，而不是静默失败。
 
 ## 测试
 
@@ -167,24 +298,34 @@ python3 main.py --live-llm --input "你的研究想法"
 python3 -m unittest discover -s tests
 ```
 
-当前测试覆盖的重点包括：
+目前测试覆盖：
 
-- 关键词提取与去重
-- arXiv 返回解析与去重
-- 评分结果结构
-- 候选方向 fallback 逻辑
-- 无论文时的计划和代码生成
-- 成功/失败运行的持久化
-- CLI 是否能从仓库根目录直接运行
+- 关键词提取与中英文 fallback
+- arXiv XML 解析与去重
+- prompt 模板加载与版本追踪
+- 仓储层的 run / artifact / event / cache 能力
+- 检索层离线 fallback
+- 编排层运行与 resume
+- CLI 入口
+- 后台任务
+- API 健康检查和静态页面
+- benchmark 评估
 
-## 下一步计划
+## 当前仍然不完美的地方
 
-- 检索源扩展到 Semantic Scholar、Crossref 等
-- 把顺序编排升级成图编排
-- 增加更强的评审与重排序逻辑
-- 接入前端或 API 服务
-- 引入异步任务系统处理长流程运行
+虽然系统已经比一开始完整很多，但它还远没到“科研生产力平台”的程度。现在最真实的状态是：
+
+- 架构比以前清晰很多
+- 工程链路已经成型
+- 但研究质量仍然主要靠规则和 fallback 撑着
+
+真正要继续往上走，下一步最有价值的方向还是这些：
+
+- 强化 reranking 和论文质量判断
+- 引入更强的全文解析
+- 把计划和代码生成做成更严格的 schema 驱动
+- 增加前端交互能力，比如人工筛论文、手动重排候选方向、局部重跑某一阶段
 
 ## License
 
-This project is licensed under the Apache License 2.0
+[LICENSE](LICENSE)

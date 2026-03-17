@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Research Agent Lab</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Research Agent Lab</p>
+          <h1>把研究想法变成一条可追踪的工作流</h1>
+          <p class="lead">
+            这个页面直接连接本地 API。你可以提交研究想法、后台运行任务、查看每个 run 的状态、候选方向、研究计划和生成文件。
+          </p>
+        </div>
+        <div class="hero-card">
+          <div class="stat">
+            <span class="stat-label">默认模式</span>
+            <strong>可离线运行</strong>
+          </div>
+          <div class="stat">
+            <span class="stat-label">当前能力</span>
+            <strong>检索 / 评审 / 规划 / 代码骨架</strong>
+          </div>
+          <div class="stat">
+            <span class="stat-label">入口</span>
+            <strong><code>python3 main.py --serve-api</code></strong>
+          </div>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="panel composer">
+          <div class="panel-head">
+            <h2>发起新任务</h2>
+            <p>支持同步执行和后台执行。同步更适合调试，后台模式更适合长流程。</p>
+          </div>
+          <form id="run-form">
+            <label class="field">
+              <span>研究想法</span>
+              <textarea id="user-input" rows="6" placeholder="例如：多智能体系统如何用于科研选题与实验规划"></textarea>
+            </label>
+
+            <div class="field-row">
+              <label class="field">
+                <span>最大检索数量</span>
+                <input id="max-results" type="number" min="1" max="30" value="8" />
+              </label>
+              <label class="field checkbox">
+                <input id="live-llm" type="checkbox" />
+                <span>启用在线 LLM</span>
+              </label>
+            </div>
+
+            <div class="button-row">
+              <button type="button" id="run-sync">同步运行</button>
+              <button type="button" id="run-async" class="secondary">后台运行</button>
+              <button type="button" id="refresh-runs" class="ghost">刷新历史</button>
+            </div>
+          </form>
+
+          <div id="submission-result" class="message muted">还没有提交任务。</div>
+        </section>
+
+        <section class="panel recent-runs">
+          <div class="panel-head">
+            <h2>最近运行</h2>
+            <p>点击右侧按钮可以展开完整状态。</p>
+          </div>
+          <div id="runs-list" class="list-state">正在加载最近运行记录…</div>
+        </section>
+
+        <section class="panel run-view">
+          <div class="panel-head">
+            <h2>运行详情</h2>
+            <p>展示当前选中的 run，包括候选方向、计划预览、生成文件与事件流。</p>
+          </div>
+          <div id="run-detail" class="detail-empty">先选择一次运行，或者先提交一个新任务。</div>
+        </section>
+      </main>
+    </div>
+
+    <template id="run-item-template">
+      <article class="run-item">
+        <div class="run-item-main">
+          <div class="run-meta">
+            <span class="run-status"></span>
+            <span class="run-stage"></span>
+          </div>
+          <h3 class="run-title"></h3>
+          <p class="run-time"></p>
+        </div>
+        <div class="run-actions">
+          <button type="button" class="view-run">查看详情</button>
+        </div>
+      </article>
+    </template>
+
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

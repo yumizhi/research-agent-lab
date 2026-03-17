@@ -1,0 +1,17 @@
+[app]
+db_path = "research_agent.db"
+output_dir = "runs"
+prompt_dir = "prompt_templates"
+benchmark_path = "benchmarks/sample_tasks.json"
+max_results = 12
+live_llm = false
+retrieval_sources = ["arxiv", "semantic_scholar", "crossref"]
+default_model = "gpt-4o-mini"
+llm_timeout_seconds = 60
+llm_retries = 2
+enable_cache = true
+worker_threads = 4
+server_host = "127.0.0.1"
+server_port = 8000
+log_level = "INFO"
+json_logs = false

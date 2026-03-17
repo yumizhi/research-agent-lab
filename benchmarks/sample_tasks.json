@@ -1,0 +1,20 @@
+[
+  {
+    "case_id": "energy_forecasting",
+    "user_input": "用时序 Transformer 做电力负荷预测，并比较传统统计方法和深度学习方法",
+    "expected_keywords": ["transformer", "电力", "预测", "forecasting"],
+    "max_results": 6
+  },
+  {
+    "case_id": "multi_agent_research",
+    "user_input": "多智能体系统如何用于科研选题和实验规划",
+    "expected_keywords": ["多智能体", "科研", "实验", "agent"],
+    "max_results": 6
+  },
+  {
+    "case_id": "medical_vision",
+    "user_input": "计算机视觉在医学影像病灶检测中的方法综述与实验方案设计",
+    "expected_keywords": ["视觉", "医学", "影像", "检测"],
+    "max_results": 6
+  }
+]

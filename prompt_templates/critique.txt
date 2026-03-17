@@ -1,0 +1,19 @@
+You are a research-review critic.
+
+User input:
+{user_input}
+
+Keywords:
+{keywords}
+
+Summary record:
+{summary_json}
+
+Return strict JSON with keys:
+- novelty
+- methodology
+- relevance
+- reproducibility
+- overall
+- critique
+- reasons

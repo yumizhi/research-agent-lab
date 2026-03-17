@@ -1,153 +1,110 @@
-"""Agent definitions for the research multi-agent MVP."""
+"""Agent definitions backed by service-layer abstractions."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Protocol
 
-from models import CandidateTopic, ResearchState
-from utils import (
-    build_arxiv_query,
-    build_candidate_topics,
-    build_code_scaffold,
-    build_plan_markdown,
-    cluster_texts,
-    criticize_summary,
-    extract_keywords,
-    search_arxiv,
-    summarize_paper,
-    vectorize_texts,
-)
+from models import ResearchState
+from services import ServiceBundle
+from utils import extract_keywords
 
 
 class Agent(Protocol):
-    """Base class for all agents.
+    """Protocol implemented by all agents."""
 
-    Subclasses must implement the ``run`` method, which takes a ``state``
-    dictionary and returns the updated state. The state may contain
-    arbitrary keys and values; agents should avoid modifying keys that
-    they do not own.
-    """
-
-    name: str = "BaseAgent"
+    name: str
 
     def run(self, state: ResearchState) -> ResearchState:
         ...
 
 
 @dataclass
-class IdeaAnalyzerAgent(Agent):
-    """Extract keywords from the user's input idea or existing results."""
+class IdeaAnalyzerAgent:
+    """Extract keywords from the user's input idea."""
 
+    services: ServiceBundle
+    max_keywords: int = 10
     name: str = "IdeaAnalyzer"
 
-    max_keywords: int = 8
-
     def run(self, state: ResearchState) -> ResearchState:
-        user_input = state["user_input"]
-        keywords = extract_keywords(user_input, max_keywords=self.max_keywords)
-        state["keywords"] = keywords
+        state["keywords"] = extract_keywords(state["user_input"], max_keywords=self.max_keywords)
         return state
 
 
 @dataclass
-class FetcherAgent(Agent):
-    """Search for papers based on extracted keywords."""
+class FetcherAgent:
+    """Retrieve literature across multiple sources."""
 
+    services: ServiceBundle
+    max_results: int = 12
     name: str = "Fetcher"
-    max_results: int = 10
 
     def run(self, state: ResearchState) -> ResearchState:
-        keywords = state["keywords"]
-        if not keywords:
-            state["papers"] = []
-            return state
-        query = build_arxiv_query(keywords)
-        papers = search_arxiv(query, max_results=self.max_results)
+        papers, metadata = self.services.retrieval.search(state, max_results=self.max_results)
         state["papers"] = papers
+        state["retrieval_sources"] = metadata
+        state["run_metrics"]["papers_retrieved"] = len(papers)
         return state
 
 
 @dataclass
-class SummarizerAgent(Agent):
-    """Summarize papers using an LLM."""
+class SummarizerAgent:
+    """Produce structured summaries for retrieved papers."""
 
+    services: ServiceBundle
     name: str = "Summarizer"
-    live_llm: bool = False
 
     def run(self, state: ResearchState) -> ResearchState:
-        summaries = []
-        for paper in state["papers"]:
-            summaries.append(summarize_paper(paper, live=self.live_llm))
-        state["summaries"] = summaries
+        self.services.review.summarize_papers(state)
         return state
 
 
 @dataclass
-class CriticAgent(Agent):
-    """Critique summaries and assign scores."""
+class CriticAgent:
+    """Score and critique structured summaries."""
 
+    services: ServiceBundle
     name: str = "Critic"
-    live_llm: bool = False
 
     def run(self, state: ResearchState) -> ResearchState:
-        critiques = []
-        for item in state["summaries"]:
-            critiques.append(criticize_summary(item, state["keywords"], live=self.live_llm))
-        state["critiques"] = critiques
+        self.services.review.critique_summaries(state)
         return state
 
 
 @dataclass
-class TrendAgent(Agent):
-    """Identify candidate topics from scored summaries."""
+class TrendAgent:
+    """Select candidate topics from the reviewed literature set."""
 
-    name: str = "TrendAnalyzer"
-    n_clusters: int = 5
+    services: ServiceBundle
     top_n: int = 3
+    name: str = "TrendAnalyzer"
 
     def run(self, state: ResearchState) -> ResearchState:
-        critiques = state["critiques"]
-        candidate_topics: list[CandidateTopic] = []
-        texts = [item["summary"] for item in critiques if item["summary"]]
-        cluster_labels = None
-        if len(texts) >= 3:
-            vectors = vectorize_texts(texts)
-            cluster_labels = cluster_texts(vectors, n_clusters=min(self.n_clusters, len(texts)))
-        candidate_topics = build_candidate_topics(critiques, cluster_labels=cluster_labels, top_n=self.top_n)
-        if not candidate_topics:
-            title = " / ".join(keyword.title() for keyword in state["keywords"][:3]) or "Research Direction"
-            candidate_topics = [
-                {
-                    "title": title,
-                    "rationale": "Fallback topic derived from the user idea because there were too few scored papers.",
-                    "source_papers": [paper["title"] for paper in state["papers"][:3]],
-                    "score": 0.0,
-                }
-            ]
-        state["candidate_topics"] = candidate_topics
+        self.services.review.select_candidate_topics(state, top_n=self.top_n)
         return state
 
 
 @dataclass
-class PlanAgent(Agent):
-    """Generate a detailed research plan for the selected topic."""
+class PlanAgent:
+    """Generate a research plan from the selected topic."""
 
+    services: ServiceBundle
     name: str = "Planner"
-    live_llm: bool = False
 
     def run(self, state: ResearchState) -> ResearchState:
-        state["plan_markdown"] = build_plan_markdown(state, live=self.live_llm)
+        self.services.planning.build_plan(state)
         return state
 
 
 @dataclass
-class CodeGenAgent(Agent):
-    """Generate code skeletons based on the research plan."""
+class CodeGenAgent:
+    """Generate a project scaffold from the research plan."""
 
+    services: ServiceBundle
     name: str = "CodeGenerator"
-    live_llm: bool = False
 
     def run(self, state: ResearchState) -> ResearchState:
-        state["generated_code"] = build_code_scaffold(state, live=self.live_llm)
+        self.services.planning.build_project_files(state)
+        self.services.planning.build_report(state)
         return state

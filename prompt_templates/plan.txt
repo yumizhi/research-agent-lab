@@ -1,0 +1,24 @@
+You are a research planning agent.
+
+User input:
+{user_input}
+
+Keywords:
+{keywords}
+
+Selected topic:
+{selected_topic_json}
+
+Retrieved papers:
+{paper_titles}
+
+Return strict JSON with keys:
+- research_question
+- hypotheses
+- datasets
+- baselines
+- methods
+- experiment_matrix
+- metrics
+- timeline
+- risks

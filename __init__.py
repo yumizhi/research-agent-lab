@@ -1,15 +1,16 @@
-"""Top‑level package for the multi‑agent research assistant prototype.
+"""Top-level package exports for Research Agent Lab."""
 
-This package contains a set of modular agents, utility functions and an
-orchestrator used to build a research workflow. Each agent is responsible
-for a specific part of the pipeline: keyword extraction, literature search,
-summarization, critique, trend analysis, research planning and code
-generation. The orchestrator coordinates the agents and handles shared
-state. See the accompanying documentation for details.
-"""
+from __future__ import annotations
 
 __all__ = [
     "agents",
-    "utils",
+    "config",
+    "evaluation",
+    "main",
+    "models",
     "orchestrator",
+    "repository",
+    "services",
+    "storage",
+    "utils",
 ]
